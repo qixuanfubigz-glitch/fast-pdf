@@ -3,14 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PDF 查看与合并 - 免费在线工具</title>
+  <title>LightPDF - 极简免费的 PDF 合并工具</title>
+  <meta name="description" content="LightPDF 是一款极简免费的 PDF 合并工具，免费、不限次数使用，隐私安全，所有文件均在浏览器内处理，无需上传到服务器。" />
+  <meta name="keywords" content="PDF合并,免费PDF工具,在线合并PDF,隐私安全,浏览器内处理,不限次数,LightPDF" />
+  <meta property="og:title" content="LightPDF - 极简免费的 PDF 合并工具" />
+  <meta property="og:description" content="免费、不限次数、隐私安全，所有 PDF 在浏览器内处理，无需上传。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="zh_CN" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
   <style>
     [data-pdf-viewer] { min-height: 60vh; }
     .page-canvas { box-shadow: 0 2px 8px rgba(0,0,0,0.15); margin: 0 auto 1rem; display: block; }
     @media (max-width: 640px) { .page-canvas { max-width: 100% !important; } }
+    .progress-bar { transition: width 0.2s ease-out; }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
@@ -24,6 +32,7 @@
     <div class="flex gap-2 mb-6 border-b border-slate-200">
       <button type="button" id="tab-view" class="tab px-4 py-2 font-medium rounded-t-lg transition-colors bg-indigo-100 text-indigo-700">查看 PDF</button>
       <button type="button" id="tab-merge" class="tab px-4 py-2 font-medium rounded-t-lg transition-colors text-slate-600 hover:bg-slate-100">合并 PDF</button>
+      <button type="button" id="tab-compress" class="tab px-4 py-2 font-medium rounded-t-lg transition-colors text-slate-600 hover:bg-slate-100">压缩 PDF</button>
     </div>
 
     <!-- 查看 PDF 面板 -->
@@ -63,6 +72,33 @@
       </ul>
     </section>
 
+    <!-- 压缩 PDF 面板 -->
+    <section id="panel-compress" class="panel hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+      <h2 class="text-lg font-semibold text-slate-800 mb-4">选择 PDF 文件进行压缩 (Compress PDF)</h2>
+      <div class="flex flex-wrap gap-4 items-center mb-4">
+        <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          选择 PDF
+          <input type="file" id="pdf-file-compress" accept=".pdf" class="hidden" />
+        </label>
+        <button type="button" id="compress-download" disabled class="px-4 py-2 bg-slate-300 text-slate-500 rounded-lg cursor-not-allowed" title="请先选择一个 PDF">压缩并下载</button>
+      </div>
+      <p id="compress-filename" class="text-slate-500 text-sm mb-3"></p>
+      <label class="flex items-center gap-2 text-sm text-slate-600 mb-3">
+        <input type="checkbox" id="compress-aggressive" class="rounded border-slate-300" />
+        <span>高压缩（降低图片质量，体积更小）</span>
+      </label>
+      <div id="compress-progress-wrap" class="hidden mt-3">
+        <div class="flex justify-between text-sm text-slate-600 mb-1">
+          <span id="compress-progress-label">正在处理…</span>
+          <span id="compress-progress-pct">0%</span>
+        </div>
+        <div class="h-2 bg-slate-200 rounded-full overflow-hidden">
+          <div id="compress-progress-bar" class="progress-bar h-full bg-amber-500 rounded-full" style="width: 0%;"></div>
+        </div>
+      </div>
+    </section>
+
     <footer class="text-center text-slate-500 text-sm mt-12">
       <p>所有处理均在您的设备本地完成，不会上传到任何服务器。</p>
     </footer>
@@ -75,24 +111,34 @@
     // ---------- 标签切换 ----------
     const tabView = document.getElementById('tab-view');
     const tabMerge = document.getElementById('tab-merge');
+    const tabCompress = document.getElementById('tab-compress');
     const panelView = document.getElementById('panel-view');
     const panelMerge = document.getElementById('panel-merge');
+    const panelCompress = document.getElementById('panel-compress');
 
     function showPanel(name) {
       const isView = name === 'view';
+      const isMerge = name === 'merge';
+      const isCompress = name === 'compress';
       panelView.classList.toggle('hidden', !isView);
-      panelMerge.classList.toggle('hidden', isView);
+      panelMerge.classList.toggle('hidden', !isMerge);
+      panelCompress.classList.toggle('hidden', !isCompress);
       tabView.classList.toggle('bg-indigo-100', isView);
       tabView.classList.toggle('text-indigo-700', isView);
       tabView.classList.toggle('bg-slate-100', !isView);
       tabView.classList.toggle('text-slate-600', !isView);
-      tabMerge.classList.toggle('bg-indigo-100', !isView);
-      tabMerge.classList.toggle('text-indigo-700', !isView);
-      tabMerge.classList.toggle('bg-slate-100', isView);
-      tabMerge.classList.toggle('text-slate-600', isView);
+      tabMerge.classList.toggle('bg-indigo-100', isMerge);
+      tabMerge.classList.toggle('text-indigo-700', isMerge);
+      tabMerge.classList.toggle('bg-slate-100', !isMerge);
+      tabMerge.classList.toggle('text-slate-600', !isMerge);
+      tabCompress.classList.toggle('bg-amber-100', isCompress);
+      tabCompress.classList.toggle('text-amber-800', isCompress);
+      tabCompress.classList.toggle('bg-slate-100', !isCompress);
+      tabCompress.classList.toggle('text-slate-600', !isCompress);
     }
     tabView.addEventListener('click', () => showPanel('view'));
     tabMerge.addEventListener('click', () => showPanel('merge'));
+    tabCompress.addEventListener('click', () => showPanel('compress'));
 
     // ---------- 查看 PDF ----------
     let pdfDocView = null;
@@ -199,6 +245,119 @@
       }
       mergeDownload.disabled = false;
       mergeDownload.textContent = '合并并下载';
+    });
+
+    // ---------- 压缩 PDF ----------
+    const compressFileInput = document.getElementById('pdf-file-compress');
+    const compressDownload = document.getElementById('compress-download');
+    const compressFilename = document.getElementById('compress-filename');
+    const compressAggressive = document.getElementById('compress-aggressive');
+    const compressProgressWrap = document.getElementById('compress-progress-wrap');
+    const compressProgressLabel = document.getElementById('compress-progress-label');
+    const compressProgressPct = document.getElementById('compress-progress-pct');
+    const compressProgressBar = document.getElementById('compress-progress-bar');
+    let compressFile = null;
+
+    function setCompressProgress(pct, label) {
+      compressProgressBar.style.width = pct + '%';
+      compressProgressPct.textContent = Math.round(pct) + '%';
+      if (label) compressProgressLabel.textContent = label;
+    }
+
+    compressFileInput.addEventListener('change', function () {
+      const file = this.files[0];
+      if (!file) {
+        compressFile = null;
+        compressFilename.textContent = '';
+        compressDownload.disabled = true;
+        compressDownload.className = 'px-4 py-2 bg-slate-300 text-slate-500 rounded-lg cursor-not-allowed';
+        return;
+      }
+      compressFile = file;
+      compressFilename.textContent = file.name;
+      compressDownload.disabled = false;
+      compressDownload.className = 'px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors';
+    });
+
+    compressDownload.addEventListener('click', async function () {
+      if (!compressFile) return;
+      compressDownload.disabled = true;
+      compressProgressWrap.classList.remove('hidden');
+      setCompressProgress(0, '正在加载…');
+
+      const run = async () => {
+        await new Promise(r => setTimeout(r, 50));
+        const { PDFDocument } = PDFLib;
+        const aggressive = compressAggressive.checked;
+
+        if (aggressive) {
+          setCompressProgress(5, '正在加载 PDF…');
+          const srcBytes = new Uint8Array(await compressFile.arrayBuffer());
+          const pdfDocPdfJs = await pdfjsLib.getDocument(srcBytes).promise;
+          const numPages = pdfDocPdfJs.numPages;
+          const newPdf = await PDFDocument.create();
+
+          for (let i = 0; i < numPages; i++) {
+            setCompressProgress(5 + (80 * (i + 1) / numPages), '正在处理第 ' + (i + 1) + ' / ' + numPages + ' 页…');
+            await new Promise(r => setTimeout(r, 0));
+            const page = await pdfDocPdfJs.getPage(i + 1);
+            const viewport = page.getViewport({ scale: 1.5 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext('2d');
+            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+
+            const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.72);
+            const base64 = jpegDataUrl.split(',')[1];
+            const binaryStr = atob(base64);
+            const jpegBytes = new Uint8Array(binaryStr.length);
+            for (let j = 0; j < binaryStr.length; j++) jpegBytes[j] = binaryStr.charCodeAt(j);
+
+            const jpegImage = await newPdf.embedJpg(jpegBytes);
+            const w = viewport.width;
+            const h = viewport.height;
+            const pdfPage = newPdf.addPage([w, h]);
+            pdfPage.drawImage(jpegImage, { x: 0, y: 0, width: w, height: h });
+          }
+
+          setCompressProgress(90, '正在生成文件…');
+          await new Promise(r => setTimeout(r, 0));
+          const bytes = await newPdf.save({ useObjectStreams: true });
+          return bytes;
+        } else {
+          setCompressProgress(20, '正在移除未使用对象…');
+          await new Promise(r => setTimeout(r, 0));
+          const buf = await compressFile.arrayBuffer();
+          const doc = await PDFDocument.load(buf, { ignoreEncryption: true });
+          const indices = doc.getPageIndices();
+          setCompressProgress(40, '正在复制页面…');
+          const newPdf = await PDFDocument.create();
+          const pages = await newPdf.copyPages(doc, indices);
+          pages.forEach(p => newPdf.addPage(p));
+          setCompressProgress(70, '正在压缩并保存…');
+          await new Promise(r => setTimeout(r, 0));
+          const bytes = await newPdf.save({ useObjectStreams: true });
+          return bytes;
+        }
+      };
+
+      try {
+        const bytes = await run();
+        setCompressProgress(100, '完成');
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = compressFile.name.replace(/\.pdf$/i, '') + '_compressed.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert('压缩失败：' + (err.message || String(err)));
+      }
+      compressDownload.disabled = false;
+      compressProgressWrap.classList.add('hidden');
+      setCompressProgress(0, '正在处理…');
     });
   </script>
 </body>

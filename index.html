@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF 查看与合并 - 免费在线工具</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <style>
+    [data-pdf-viewer] { min-height: 60vh; }
+    .page-canvas { box-shadow: 0 2px 8px rgba(0,0,0,0.15); margin: 0 auto 1rem; display: block; }
+    @media (max-width: 640px) { .page-canvas { max-width: 100% !important; } }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <div class="max-w-4xl mx-auto px-4 py-8">
+    <header class="text-center mb-10">
+      <h1 class="text-3xl font-bold text-slate-800 mb-2">PDF 查看与合并</h1>
+      <p class="text-slate-600">纯前端工具，无需上传到服务器，文件仅在您浏览器中处理</p>
+    </header>
+
+    <!-- 标签切换 -->
+    <div class="flex gap-2 mb-6 border-b border-slate-200">
+      <button type="button" id="tab-view" class="tab px-4 py-2 font-medium rounded-t-lg transition-colors bg-indigo-100 text-indigo-700">查看 PDF</button>
+      <button type="button" id="tab-merge" class="tab px-4 py-2 font-medium rounded-t-lg transition-colors text-slate-600 hover:bg-slate-100">合并 PDF</button>
+    </div>
+
+    <!-- 查看 PDF 面板 -->
+    <section id="panel-view" class="panel bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+      <h2 class="text-lg font-semibold text-slate-800 mb-4">选择 PDF 文件进行查看</h2>
+      <div class="flex flex-wrap gap-4 items-center">
+        <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          选择 PDF
+          <input type="file" id="pdf-file-view" accept=".pdf" class="hidden" />
+        </label>
+        <span id="view-filename" class="text-slate-500 text-sm"></span>
+      </div>
+      <div class="mt-4 flex flex-wrap gap-2 items-center" id="view-pagination" style="display: none;">
+        <button type="button" id="view-prev" class="px-3 py-1 rounded bg-slate-200 hover:bg-slate-300 disabled:opacity-50" disabled>上一页</button>
+        <span id="view-page-info" class="text-sm text-slate-600"></span>
+        <button type="button" id="view-next" class="px-3 py-1 rounded bg-slate-200 hover:bg-slate-300 disabled:opacity-50">下一页</button>
+      </div>
+      <div id="pdf-viewer" data-pdf-viewer class="mt-6 flex flex-col items-center bg-slate-100 rounded-lg p-4">
+        <p class="text-slate-500">请先选择一个 PDF 文件</p>
+      </div>
+    </section>
+
+    <!-- 合并 PDF 面板 -->
+    <section id="panel-merge" class="panel hidden bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+      <h2 class="text-lg font-semibold text-slate-800 mb-4">选择多个 PDF 文件，按顺序合并</h2>
+      <div class="flex flex-wrap gap-4 items-center mb-4">
+        <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          添加 PDF
+          <input type="file" id="pdf-files-merge" accept=".pdf" multiple class="hidden" />
+        </label>
+        <button type="button" id="merge-download" disabled class="px-4 py-2 bg-slate-300 text-slate-500 rounded-lg cursor-not-allowed" title="请先添加至少 2 个 PDF">合并并下载</button>
+      </div>
+      <ul id="merge-list" class="space-y-2 text-sm text-slate-600">
+        <li class="text-slate-400">尚未添加文件，可多选多个 PDF 后点击「合并并下载」</li>
+      </ul>
+    </section>
+
+    <footer class="text-center text-slate-500 text-sm mt-12">
+      <p>所有处理均在您的设备本地完成，不会上传到任何服务器。</p>
+    </footer>
+  </div>
+
+  <script>
+    // 配置 PDF.js worker（使用 CDN 同源 worker）
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    // ---------- 标签切换 ----------
+    const tabView = document.getElementById('tab-view');
+    const tabMerge = document.getElementById('tab-merge');
+    const panelView = document.getElementById('panel-view');
+    const panelMerge = document.getElementById('panel-merge');
+
+    function showPanel(name) {
+      const isView = name === 'view';
+      panelView.classList.toggle('hidden', !isView);
+      panelMerge.classList.toggle('hidden', isView);
+      tabView.classList.toggle('bg-indigo-100', isView);
+      tabView.classList.toggle('text-indigo-700', isView);
+      tabView.classList.toggle('bg-slate-100', !isView);
+      tabView.classList.toggle('text-slate-600', !isView);
+      tabMerge.classList.toggle('bg-indigo-100', !isView);
+      tabMerge.classList.toggle('text-indigo-700', !isView);
+      tabMerge.classList.toggle('bg-slate-100', isView);
+      tabMerge.classList.toggle('text-slate-600', isView);
+    }
+    tabView.addEventListener('click', () => showPanel('view'));
+    tabMerge.addEventListener('click', () => showPanel('merge'));
+
+    // ---------- 查看 PDF ----------
+    let pdfDocView = null;
+    let currentPage = 1;
+    const viewerEl = document.getElementById('pdf-viewer');
+    const fileInputView = document.getElementById('pdf-file-view');
+    const viewFilename = document.getElementById('view-filename');
+    const viewPagination = document.getElementById('view-pagination');
+    const viewPageInfo = document.getElementById('view-page-info');
+    const viewPrev = document.getElementById('view-prev');
+    const viewNext = document.getElementById('view-next');
+
+    function renderPage(num) {
+      if (!pdfDocView) return;
+      const total = pdfDocView.numPages;
+      currentPage = Math.max(1, Math.min(num, total));
+      viewPrev.disabled = currentPage <= 1;
+      viewNext.disabled = currentPage >= total;
+      viewPageInfo.textContent = `第 ${currentPage} / ${total} 页`;
+
+      pdfDocView.getPage(currentPage).then(function (page) {
+        const scale = 1.5;
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        canvas.className = 'page-canvas';
+        viewerEl.innerHTML = '';
+        viewerEl.appendChild(canvas);
+        page.render({ canvasContext: ctx, viewport: viewport });
+      });
+    }
+
+    fileInputView.addEventListener('change', function () {
+      const file = this.files[0];
+      if (!file) return;
+      viewFilename.textContent = file.name;
+      const reader = new FileReader();
+      reader.onload = function () {
+        const typed = new Uint8Array(reader.result);
+        pdfjsLib.getDocument(typed).promise.then(function (pdf) {
+          pdfDocView = pdf;
+          viewPagination.style.display = 'flex';
+          renderPage(1);
+        }).catch(function (err) {
+          viewerEl.innerHTML = '<p class="text-red-600">无法加载该 PDF：' + err.message + '</p>';
+          viewPagination.style.display = 'none';
+        });
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    viewPrev.addEventListener('click', () => renderPage(currentPage - 1));
+    viewNext.addEventListener('click', () => renderPage(currentPage + 1));
+
+    // ---------- 合并 PDF ----------
+    const mergeFileInput = document.getElementById('pdf-files-merge');
+    const mergeList = document.getElementById('merge-list');
+    const mergeDownload = document.getElementById('merge-download');
+    let mergeFiles = [];
+
+    mergeFileInput.addEventListener('change', function () {
+      const added = Array.from(this.files || []);
+      mergeFiles = added.length ? added : mergeFiles;
+      if (mergeFiles.length === 0) {
+        mergeList.innerHTML = '<li class="text-slate-400">尚未添加文件，可多选多个 PDF 后点击「合并并下载」</li>';
+        mergeDownload.disabled = true;
+        mergeDownload.className = 'px-4 py-2 bg-slate-300 text-slate-500 rounded-lg cursor-not-allowed';
+        return;
+      }
+      mergeList.innerHTML = mergeFiles.map((f, i) => '<li class="flex items-center gap-2"><span class="text-slate-400">' + (i + 1) + '.</span> ' + f.name + '</li>').join('');
+      mergeDownload.disabled = mergeFiles.length < 2;
+      if (mergeFiles.length >= 2) {
+        mergeDownload.className = 'px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors';
+      } else {
+        mergeDownload.className = 'px-4 py-2 bg-slate-300 text-slate-500 rounded-lg cursor-not-allowed';
+      }
+    });
+
+    mergeDownload.addEventListener('click', async function () {
+      if (mergeFiles.length < 2) return;
+      mergeDownload.disabled = true;
+      mergeDownload.textContent = '合并中…';
+      try {
+        const { PDFDocument } = PDFLib;
+        const merged = await PDFDocument.create();
+        for (const file of mergeFiles) {
+          const buf = await file.arrayBuffer();
+          const doc = await PDFDocument.load(buf);
+          const pages = await merged.copyPages(doc, doc.getPageIndices());
+          pages.forEach(p => merged.addPage(p));
+        }
+        const bytes = await merged.save();
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'merged.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert('合并失败：' + (err.message || String(err)));
+      }
+      mergeDownload.disabled = false;
+      mergeDownload.textContent = '合并并下载';
+    });
+  </script>
+</body>
+</html>
